@@ -1,8 +1,8 @@
 defmodule Servy.Handler do
   require Logger
+  alias Servy.VideoCam
   alias Servy.Conv
   alias Servy.BearController
-  alias Servy.VideoCam
 
   import Servy.Parser, only: [parse: 1]
   import Servy.FileHandler, only: [handle_file: 2]
@@ -77,14 +77,35 @@ defmodule Servy.Handler do
     |> markdown_to_html
   end
 
-  def route(%Conv{method: "GET", path: "/snapshots"} = conv) do
-    snapshot1 = VideoCam.get_snapshot("cam-1")
-    snapshot2 = VideoCam.get_snapshot("cam-2")
-    snapshot3 = VideoCam.get_snapshot("cam-3")
+  def route(%Conv{method: "GET", path: "/sensors"} = conv) do
+    task = Task.async(Servy.Tracker, :get_location, ["bigfoot"])
 
-    snapshots = [snapshot1, snapshot2, snapshot3]
+    snapshots =
+      ["cam-1", "cam-2", "cam-3"]
+      |> Enum.map(&Task.async(VideoCam, :get_snapshot, [&1]))
+      |> Enum.map(&Task.await/1)
 
-    %{conv | status: 200, resp_body: inspect(snapshots)}
+    where_is_bigfoot = Task.await(task)
+
+    %{conv | status: 200, resp_body: Servy.SensorsView.sensors(snapshots, where_is_bigfoot)}
+  end
+
+  def route(%Conv{method: "POST", path: "/pledges"} = conv) do
+    Servy.PledgeController.create(conv, conv.params)
+  end
+
+  def route(%Conv{method: "GET", path: "/pledges"} = conv) do
+    Servy.PledgeController.index(conv)
+  end
+
+  def route(%Conv{method: "GET", path: "/pledges/new"} = conv) do
+    Servy.PledgeController.new(conv)
+  end
+
+  def route(%Conv{method: "GET", path: "/404s"} = conv) do
+    counts = Servy.FourOhFourCounter.get_counts()
+
+    %{conv | status: 200, resp_body: inspect(counts)}
   end
 
   def route(%Conv{path: path} = conv) do
