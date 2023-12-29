@@ -1,21 +1,54 @@
 defmodule Servy.Wildthings do
   alias Servy.Bear
 
+  @db_path Path.expand("db", File.cwd!())
+
+  # List all bears from the JSON file
   def list_bears do
-    [
-      %Bear{id: 1, name: "Teddy", type: "Brown", hibernating: true},
-      %Bear{id: 2, name: "Smokey", type: "Black"},
-      %Bear{id: 3, name: "Paddington", type: "Brown"},
-      %Bear{id: 4, name: "Scarface", type: "Grizzly", hibernating: true},
-      %Bear{id: 5, name: "Snow", type: "Polar"},
-      %Bear{id: 6, name: "Brutus", type: "Grizzly"},
-      %Bear{id: 7, name: "Rosie", type: "Black", hibernating: true},
-      %Bear{id: 8, name: "Roscoe", type: "Panda"},
-      %Bear{id: 9, name: "Iceman", type: "Polar", hibernating: true},
-      %Bear{id: 10, name: "Kenai", type: "Grizzly"}
-    ]
+    @db_path
+    |> Path.join("bears.json")
+    |> read_json
+    |> parse_json
   end
 
+  # Read the contents of the JSON file
+  defp read_json(source) do
+    case File.read(source) do
+      {:ok, contents} ->
+        contents
+
+      {:error, reason} ->
+        IO.inspect("Error reading #{source}: #{reason}")
+        "[]"
+    end
+  end
+
+  # Parse the JSON contents into a list of maps (bears)
+  defp parse_json(contents) do
+    case Jason.decode(contents) do
+      {:ok, data} ->
+        Enum.map(data["bears"], &parse_bear/1)
+
+      {:error, _reason} ->
+        []
+    end
+  end
+
+  defp parse_bear(%{} = bear) do
+    new_bear = %Bear{
+      id: bear["id"],
+      name: bear["name"],
+      type: bear["type"]
+    }
+
+    if(is_nil(bear["hibernating"])) do
+      %Bear{new_bear | hibernating: false}
+    else
+      %Bear{new_bear | hibernating: bear["hibernating"]}
+    end
+  end
+
+  # Retrieve a single bear by ID
   def get_bear(id) when is_integer(id) do
     Enum.find(list_bears(), fn b -> b.id == id end)
   end

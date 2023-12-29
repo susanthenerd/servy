@@ -2,6 +2,7 @@ defmodule Servy.Handler do
   require Logger
   alias Servy.Conv
   alias Servy.BearController
+  alias Servy.VideoCam
 
   import Servy.Parser, only: [parse: 1]
   import Servy.FileHandler, only: [handle_file: 2]
@@ -23,7 +24,7 @@ defmodule Servy.Handler do
     |> Servy.Plugins.log()
     |> route
     |> Servy.Plugins.track()
-    |> Servy.Plugins.emojify()
+    |> Conv.put_content_length()
     |> format_response
   end
 
@@ -40,6 +41,14 @@ defmodule Servy.Handler do
 
   def route(%Conv{method: "GET", path: "/bears"} = conv) do
     BearController.index(conv)
+  end
+
+  def route(%Conv{method: "GET", path: "/api/bears"} = conv) do
+    Servy.Api.BearController.index(conv)
+  end
+
+  def route(%Conv{method: "POST", path: "/api/bears"} = conv) do
+    Servy.Api.BearController.create(conv, conv.params)
   end
 
   def route(%Conv{method: "GET", path: "/bears/new"} = conv) do
@@ -60,137 +69,40 @@ defmodule Servy.Handler do
     BearController.delete(conv)
   end
 
-  def route(%Conv{method: "GET", path: "/pages/" <> file} = conv) do
+  def route(%Conv{method: "GET", path: "/pages/" <> name} = conv) do
     @pages_path
-    |> Path.join(file <> ".html")
+    |> Path.join("#{name}.md")
     |> File.read()
     |> handle_file(conv)
+    |> markdown_to_html
+  end
+
+  def route(%Conv{method: "GET", path: "/snapshots"} = conv) do
+    snapshot1 = VideoCam.get_snapshot("cam-1")
+    snapshot2 = VideoCam.get_snapshot("cam-2")
+    snapshot3 = VideoCam.get_snapshot("cam-3")
+
+    snapshots = [snapshot1, snapshot2, snapshot3]
+
+    %{conv | status: 200, resp_body: inspect(snapshots)}
   end
 
   def route(%Conv{path: path} = conv) do
-    %Conv{conv | status: 404, resp_body: "No #{path} here"}
+    %Conv{conv | status: 404, resp_body: "No #{path} here!"}
   end
 
   def format_response(%Conv{} = conv) do
     """
-    HTTP/1.1 #{Conv.full_status(conv)}
-    Content-Type: text/html
-    Content-Length: #{byte_size(conv.resp_body)}
-
+    HTTP/1.1 #{Conv.full_status(conv)}\r
+    #{Conv.format_response_headers(conv)}
+    \r
     #{conv.resp_body}
     """
   end
+
+  def markdown_to_html(%Conv{status: 200} = conv) do
+    %{conv | resp_body: Earmark.as_html!(conv.resp_body)}
+  end
+
+  def markdown_to_html(%Conv{} = conv), do: conv
 end
-
-request = """
-GET /wildthings HTTP/1.1
-Host: example.com
-User-Agent: ExampleBrowser/1.0
-Accept: */*
-
-"""
-
-response = Servy.Handler.handle(request)
-IO.puts(response)
-
-request = """
-GET /bears HTTP/1.1
-Host: example.com
-User-Agent: ExampleBrowser/1.0
-Accept: */*
-
-"""
-
-response = Servy.Handler.handle(request)
-IO.puts(response)
-
-request = """
-GET /bigfoot HTTP/1.1
-Host: example.com
-User-Agent: ExampleBrowser/1.0
-Accept: */*
-
-"""
-
-response = Servy.Handler.handle(request)
-IO.puts(response)
-
-request = """
-GET /bears/1 HTTP/1.1
-Host: example.com
-User-Agent: ExampleBrowser/1.0
-Accept: */*
-
-"""
-
-response = Servy.Handler.handle(request)
-IO.puts(response)
-
-request = """
-DELETE /bears/1 HTTP/1.1
-Host: example.com
-User-Agent: ExampleBrowser/1.0
-Accept: */*
-
-"""
-
-response = Servy.Handler.handle(request)
-IO.puts(response)
-
-request = """
-GET /wildlife HTTP/1.1
-Host: example.com
-User-Agent: ExampleBrowser/1.0
-Accept: */*
-
-"""
-
-response = Servy.Handler.handle(request)
-IO.puts(response)
-
-request = """
-GET /bears?id=1 HTTP/1.1
-Host: example.com
-User-Agent: ExampleBrowser/1.0
-Accept: */*
-
-"""
-
-response = Servy.Handler.handle(request)
-IO.puts(response)
-
-request = """
-GET /about HTTP/1.1
-Host: example.com
-User-Agent: ExampleBrowser/1.0
-Accept: */*
-
-"""
-
-response = Servy.Handler.handle(request)
-IO.puts(response)
-
-request = """
-GET /bears/new HTTP/1.1
-Host: example.com
-User-Agent: ExampleBrowser/1.0
-Accept: */*
-
-"""
-
-response = Servy.Handler.handle(request)
-IO.puts(response)
-
-request = """
-POST /bears HTTP/1.1
-Host: example.com
-User-Agent: ExampleBrowser/1.0
-Accept: */*
-Content-Type: application/x-www-form-urlencoded
-Content-Length: 21
-
-name=Baloo&type=Brown
-"""
-
-response = Servy.Handler.handle(request)
-IO.puts(response)

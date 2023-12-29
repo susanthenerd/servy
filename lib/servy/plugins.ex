@@ -6,7 +6,13 @@ defmodule Servy.Plugins do
   A couple of plugins
   """
 
-  def log(%Conv{} = conv), do: IO.inspect(conv)
+  def log(%Conv{} = conv) do
+    if Mix.env() == :env do
+      IO.inspect(conv)
+    end
+
+    conv
+  end
 
   def rewrite_path(%Conv{path: "/wildlife"} = conv) do
     %{conv | path: "/wildthings"}
@@ -29,18 +35,12 @@ defmodule Servy.Plugins do
   Logs 404 requests.
   """
   def track(%Conv{status: 404, path: path} = conv) do
-    Logger.warning("#{path} is on the loose!")
+    if(Mix.env() != :test) do
+      Logger.warning("#{path} is on the loose!")
+    end
+
     conv
   end
 
   def track(%Conv{} = conv), do: conv
-
-  def emojify(%Conv{status: 200} = conv) do
-    emojies = String.duplicate("🎉", 5)
-    body = emojies <> "\n" <> conv.resp_body <> "\n" <> emojies
-
-    %{conv | resp_body: body}
-  end
-
-  def emojify(%Conv{} = conv), do: conv
 end
